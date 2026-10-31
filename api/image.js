@@ -15,6 +15,29 @@ async function verifyUser(req) {
   return r.ok;
 }
 
+// ترجمة الوصف للإنجليزية بـ Gemini (نماذج الصور كتفهم الإنجليزية أحسن بزاف)
+async function toEnglish(prompt) {
+  if (!process.env.AI_KEY || !/[^\x00-\x7F]/.test(prompt)) return prompt;
+  try {
+    const base = (process.env.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai').replace(/\/$/, '');
+    const r = await fetch(base + '/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + process.env.AI_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: process.env.AI_MODEL || 'gemini-2.5-flash',
+        max_tokens: 200,
+        messages: [
+          { role: 'system', content: 'Translate the user text into a short, vivid English prompt for an image generator. Output only the prompt, nothing else.' },
+          { role: 'user', content: prompt }
+        ]
+      })
+    });
+    const data = await r.json();
+    const t = r.ok && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+    return (t && t.trim()) || prompt;
+  } catch (e) { return prompt; }
+}
+
 async function viaCloudflare(prompt) {
   const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + process.env.CF_ACCOUNT_ID + '/ai/run/@cf/black-forest-labs/flux-1-schnell', {
     method: 'POST',
@@ -31,6 +54,7 @@ async function viaCloudflare(prompt) {
 async function viaPollinations(prompt) {
   const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(prompt) + '?width=1024&height=1024&nologo=true&model=flux';
   const r = await fetch(url);
+  if (r.status === 402) throw new Error('Pollinations صار كيطلب الدفع. فعّل Cloudflare (CF_ACCOUNT_ID و CF_API_TOKEN).');
   if (!r.ok) throw new Error('Pollinations error ' + r.status);
   const type = r.headers.get('content-type') || 'image/jpeg';
   if (!type.startsWith('image/')) throw new Error('Pollinations لم يرجع صورة');
@@ -46,7 +70,8 @@ module.exports = async (req, res) => {
     const prompt = String(body.prompt || '').trim().slice(0, 500);
     if (!prompt) return res.status(400).json({ message: 'اكتب وصف الصورة' });
     const useCF = process.env.CF_ACCOUNT_ID && process.env.CF_API_TOKEN;
-    const image = useCF ? await viaCloudflare(prompt) : await viaPollinations(prompt);
+    const en = await toEnglish(prompt);
+    const image = useCF ? await viaCloudflare(en) : await viaPollinations(en);
     return res.status(200).json({ image });
   } catch (e) {
     return res.status(502).json({ message: String(e.message || e) });
