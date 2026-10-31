@@ -31,6 +31,11 @@ module.exports = async (req, res) => {
       ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '').slice(0, 4000) }))
     ];
 
+    if (typeof body.image === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(body.image) && body.image.length < 3000000) {
+      const last = messages[messages.length - 1];
+      last.content = [{ type: 'text', text: last.content }, { type: 'image_url', image_url: { url: body.image } }];
+    }
+
     const r = await fetch(BASE + '/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' },
