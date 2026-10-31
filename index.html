@@ -171,7 +171,7 @@ window.sendMessage=async()=>{
  const wait=document.createElement('p');wait.className='text-xs text-purple-300';wait.textContent='HAMO-AI يفكر...';$('messages').appendChild(wait);
  try{
   const token=await currentUser.getIdToken();const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({prompt,messages:[...convMsgs,{role:'user',content:prompt}].slice(-20)})});
-  if(!res.ok)throw new Error('تعذر الاتصال بخادم الدردشة ('+res.status+').');
+  if(!res.ok){let m='';try{m=(await res.json()).message;}catch(e){}throw new Error((m||'خطأ من الخادم')+' ('+res.status+')');}
   const data=await res.json(),reply=data.reply||data.generated_text;if(!reply)throw new Error('رد غير صالح.');
   wait.remove();addBubble('ai',reply);convMsgs.push({role:'user',content:prompt},{role:'assistant',content:reply});
   const base=['users',currentUser.uid,'conversations'];
