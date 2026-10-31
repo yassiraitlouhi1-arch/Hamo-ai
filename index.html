@@ -16,6 +16,10 @@
 .navactive{background:#5145cd;color:white}
 .avatar{border-radius:9999px;background:#5145cd center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff}
 .bubble{max-width:88%;padding:13px 15px;border-radius:17px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+html,body{overscroll-behavior:none}
+#page-chat{position:fixed;left:0;right:0;top:0}
+#chatInput{font-size:16px}
+.hdr{position:sticky;top:0;z-index:10;background:#080912}
 .hdr{direction:ltr;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1f2237;height:56px}
 .hdr>*:last-child{direction:rtl}
 </style>
@@ -60,7 +64,7 @@
  <section id="page-chat" class="hidden flex-col" style="height:100vh;height:100dvh">
   <div class="hdr"><button onclick="toggleMenu(true)" class="text-2xl px-2" aria-label="القائمة">⋮</button><div class="text-sm font-bold truncate">💬 <span id="convTitle">محادثة جديدة</span></div></div>
   <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl w-full mx-auto"></div>
-  <div class="p-3 max-w-3xl w-full mx-auto"><div class="glass rounded-2xl p-2 flex gap-2"><input id="chatInput" class="field border-0 bg-transparent" placeholder="اكتب رسالتك..."><button id="sendBtn" onclick="sendMessage()" class="btn grad text-white">إرسال</button></div></div>
+  <div class="p-3 max-w-3xl w-full mx-auto"><div id="imgPreview" class="hidden mb-2 relative inline-block"><img id="imgThumb" class="h-20 rounded-xl" alt=""><button onclick="clearImage()" class="absolute -top-2 -left-2 bg-rose-500 rounded-full w-6 h-6 text-xs">✕</button></div><div class="glass rounded-2xl p-2 flex gap-2 items-center"><label class="cursor-pointer text-2xl px-2">📎<input id="imgInput" type="file" accept="image/*" class="hidden"></label><button id="imgModeBtn" type="button" onclick="toggleImgMode()" class="text-2xl px-2 rounded-lg" aria-label="إنشاء صورة">🎨</button><input id="chatInput" class="field border-0 bg-transparent" placeholder="اكتب رسالتك..."><button id="sendBtn" onclick="sendMessage()" class="btn grad text-white">إرسال</button></div></div>
  </section>
 
  <!-- الصفحة 4: توليد الفيديو -->
@@ -137,6 +141,10 @@ window.go=p=>{
  cur=p;['chat','video','account'].forEach(x=>{const el=$('page-'+x);el.classList.toggle('hidden',x!==p);el.classList.toggle('flex',x===p);});
  toggleMenu(false);
 };
+function fitChat(scroll){const el=$('page-chat'),vv=window.visualViewport;if(!vv||el.classList.contains('hidden'))return;
+ el.style.height=vv.height+'px';el.style.top=vv.offsetTop+'px';if(scroll){const m=$('messages');m.scrollTop=m.scrollHeight;}}
+if(window.visualViewport){visualViewport.addEventListener('resize',()=>fitChat(true));visualViewport.addEventListener('scroll',()=>fitChat(false));}
+const _go=window.go;window.go=p=>{_go(p);fitChat(true);};
 function refreshProfile(){
  const name=currentUser.displayName||currentUser.email;
  $('menuName').textContent=name;$('accName').textContent=name;$('accEmail').textContent=currentUser.email;
@@ -163,22 +171,60 @@ function addBubble(who,text){
  const b=document.createElement('div');b.className='bubble '+(who==='user'?'bg-indigo-600':'bg-[#25213d] border border-purple-500/20');
  b.textContent=text;w.appendChild(b);$('messages').appendChild(w);$('messages').scrollTop=$('messages').scrollHeight;
 }
-window.newChat=()=>{convId=null;convMsgs=[];$('messages').innerHTML=EMPTY;$('convTitle').textContent='محادثة جديدة';markActive();};
-window.sendMessage=async()=>{
- const input=$('chatInput'),prompt=input.value.trim();if(!prompt||!currentUser)return;
+let pendingImage=null;
+window.clearImage=()=>{pendingImage=null;$('imgPreview').classList.add('hidden');$('imgInput').value='';};
+$('imgInput').addEventListener('change',e=>{
+ const f=e.target.files[0];if(!f)return;const img=new Image();
+ img.onload=()=>{const s=Math.min(1,1024/Math.max(img.width,img.height)),c=document.createElement('canvas');
+  c.width=Math.round(img.width*s);c.height=Math.round(img.height*s);c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+  pendingImage=c.toDataURL('image/jpeg',.85);$('imgThumb').src=pendingImage;$('imgPreview').classList.remove('hidden');URL.revokeObjectURL(img.src);};
+ img.onerror=()=>alert('تعذر قراءة الصورة.');img.src=URL.createObjectURL(f);
+});
+let imageMode=false;
+window.toggleImgMode=()=>{imageMode=!imageMode;$('imgModeBtn').style.background=imageMode?'#5145cd':'';$('chatInput').placeholder=imageMode?'صف الصورة التي تريد إنشاءها...':'اكتب رسالتك...';};
+async function persist(u,r){
+ const base=['users',currentUser.uid,'conversations'];
+ if(!convId){const title=u.slice(0,40);convId=(await addDoc(collection(db,...base),{title,createdAt:serverTimestamp(),updatedAt:serverTimestamp()})).id;$('convTitle').textContent=title;}
+ else await updateDoc(doc(db,...base,convId),{updatedAt:serverTimestamp()});
+ const m=collection(db,...base,convId,'messages');
+ await addDoc(m,{role:'user',content:u,createdAt:new Date()});await addDoc(m,{role:'assistant',content:r,createdAt:new Date(Date.now()+1)});
+ loadConversations();
+}
+async function makeImage(prompt){
  if(!convMsgs.length)$('messages').innerHTML='';
- input.value='';addBubble('user',prompt);$('sendBtn').disabled=true;
+ $('chatInput').value='';$('chatInput').blur();addBubble('user','🎨 '+prompt);$('sendBtn').disabled=true;
+ const wait=document.createElement('p');wait.className='text-xs text-purple-300';wait.textContent='جاري إنشاء الصورة... قد تستغرق نصف دقيقة';$('messages').appendChild(wait);
+ try{
+  const token=await currentUser.getIdToken();
+  const res=await fetch('/api/image',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({prompt})});
+  let data={};try{data=await res.json();}catch(e){}
+  if(!res.ok||!data.image)throw new Error((data.message||'تعذر إنشاء الصورة')+' ('+res.status+')');
+  wait.remove();
+  const w=document.createElement('div');w.className='flex justify-end';
+  const b=document.createElement('div');b.className='bubble bg-[#25213d] border border-purple-500/20';
+  const im=document.createElement('img');im.src=data.image;im.className='rounded-xl max-w-full';
+  const a=document.createElement('a');a.href=data.image;a.download='hamo-ai.jpg';a.textContent='⬇ حفظ الصورة';a.className='block text-xs text-purple-300 mt-2';
+  b.append(im,a);w.appendChild(b);$('messages').appendChild(w);$('messages').scrollTop=$('messages').scrollHeight;
+  const u='🎨 '+prompt,r='🖼️ تم إنشاء الصورة.';convMsgs.push({role:'user',content:u},{role:'assistant',content:r});
+  try{await persist(u,r);}catch(e){}
+ }catch(err){wait.textContent='تعذر إنشاء الصورة: '+err.message;}finally{$('sendBtn').disabled=false;}
+}
+window.newChat=()=>{clearImage();convId=null;convMsgs=[];$('messages').innerHTML=EMPTY;$('convTitle').textContent='محادثة جديدة';markActive();};
+window.sendMessage=async()=>{
+ const input=$('chatInput');let prompt=input.value.trim();const img=pendingImage;if(!prompt&&img)prompt='صف لي هذه الصورة.';if(!prompt||!currentUser)return;const shown=(img?'📷 ':'')+prompt;if(imageMode&&!img)return makeImage(prompt);
+ if(!convMsgs.length)$('messages').innerHTML='';
+ input.value='';input.blur();addBubble('user',shown);clearImage();$('sendBtn').disabled=true;
  const wait=document.createElement('p');wait.className='text-xs text-purple-300';wait.textContent='HAMO-AI يفكر...';$('messages').appendChild(wait);
  try{
-  const token=await currentUser.getIdToken();const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({prompt,messages:[...convMsgs,{role:'user',content:prompt}].slice(-20)})});
+  const token=await currentUser.getIdToken();const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({prompt,image:img,messages:[...convMsgs,{role:'user',content:prompt}].slice(-20)})});
   if(!res.ok){let m='';try{m=(await res.json()).message;}catch(e){}throw new Error((m||'خطأ من الخادم')+' ('+res.status+')');}
   const data=await res.json(),reply=data.reply||data.generated_text;if(!reply)throw new Error('رد غير صالح.');
-  wait.remove();addBubble('ai',reply);convMsgs.push({role:'user',content:prompt},{role:'assistant',content:reply});
+  wait.remove();addBubble('ai',reply);convMsgs.push({role:'user',content:shown},{role:'assistant',content:reply});
   const base=['users',currentUser.uid,'conversations'];
   if(!convId){const title=prompt.slice(0,40);convId=(await addDoc(collection(db,...base),{title,createdAt:serverTimestamp(),updatedAt:serverTimestamp()})).id;$('convTitle').textContent=title;}
   else await updateDoc(doc(db,...base,convId),{updatedAt:serverTimestamp()});
   const m=collection(db,...base,convId,'messages');
-  await addDoc(m,{role:'user',content:prompt,createdAt:new Date()});await addDoc(m,{role:'assistant',content:reply,createdAt:new Date(Date.now()+1)});
+  await addDoc(m,{role:'user',content:shown,createdAt:new Date()});await addDoc(m,{role:'assistant',content:reply,createdAt:new Date(Date.now()+1)});
   loadConversations();
  }catch(err){wait.textContent='تعذر الحصول على رد: '+err.message;}finally{$('sendBtn').disabled=false;}
 };
