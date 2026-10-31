@@ -1,3 +1,8 @@
+// Vercel Serverless Function: /api/chat
+// Environment variables (Vercel > Settings > Environment Variables):
+//   AI_KEY       = مفتاح المزود (إجباري)
+//   AI_BASE_URL  = رابط المزود (اختياري، الافتراضي Gemini)
+//   AI_MODEL     = اسم النموذج (اختياري)
 const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyDlbSV7mwqRl3Ud2QfzAqNeguT2pD4_bZw';
 
 async function verifyUser(req) {
@@ -15,7 +20,9 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
   try {
     if (!(await verifyUser(req))) return res.status(401).json({ message: 'غير مصرح' });
-    if (!process.env.HF_TOKEN) return res.status(500).json({ message: 'HF_TOKEN غير مضبوط' });
+    const KEY = process.env.AI_KEY;
+    if (!KEY) return res.status(500).json({ message: 'AI_KEY غير مضبوط' });
+    const BASE = (process.env.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai').replace(/\/$/, '');
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
     const history = Array.isArray(body.messages) ? body.messages.slice(-20) : [{ role: 'user', content: String(body.prompt || '') }];
@@ -24,13 +31,13 @@ module.exports = async (req, res) => {
       ...history.map(m => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '').slice(0, 4000) }))
     ];
 
-    const r = await fetch('https://router.huggingface.co/v1/chat/completions', {
+    const r = await fetch(BASE + '/chat/completions', {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + process.env.HF_TOKEN, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: process.env.HF_MODEL || 'meta-llama/Llama-3.1-8B-Instruct', messages, max_tokens: 800 })
+      headers: { 'Authorization': 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: process.env.AI_MODEL || 'gemini-2.5-flash', messages, max_tokens: 800 })
     });
     const data = await r.json();
-    if (!r.ok) return res.status(502).json({ message: (data.error && data.error.message) || data.error || 'خطأ من المزود' });
+    if (!r.ok) return res.status(502).json({ message: (data.error && data.error.message) || (Array.isArray(data) && data[0] && data[0].error && data[0].error.message) || 'خطأ من المزود' });
     const reply = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
     return res.status(200).json({ reply });
   } catch (e) {
