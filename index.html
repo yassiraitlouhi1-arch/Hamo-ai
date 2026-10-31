@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>HAMO-AI</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
+*{box-sizing:border-box}body{font-family:Cairo,sans-serif;background:#080912;color:#f8fafc}
+.glass{background:rgba(19,21,39,.96);border:1px solid rgba(129,140,248,.17)}
+.grad{background:linear-gradient(120deg,#6366f1,#9333ea,#db2777)}
+.field{width:100%;background:#0b0d19;border:1px solid #292d46;border-radius:13px;padding:13px 15px;color:white;outline:none}
+.field:focus{border-color:#8b5cf6}
+.btn{border-radius:13px;padding:12px 18px;font-weight:800;transition:.2s}.btn:hover{filter:brightness(1.15)}
+.navactive{background:#5145cd;color:white}
+.avatar{border-radius:9999px;background:#5145cd center/cover no-repeat;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff}
+.bubble{max-width:88%;padding:13px 15px;border-radius:17px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px}
+.hdr{direction:ltr;display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #1f2237;height:56px}
+.hdr>*:last-child{direction:rtl}
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- الصفحة 1: إنشاء حساب / تسجيل دخول -->
+<div id="authView" class="min-h-screen flex items-center justify-center p-4">
+ <div class="glass w-full max-w-md rounded-3xl p-7">
+  <div class="text-center mb-6"><div class="w-16 h-16 grad rounded-2xl mx-auto flex items-center justify-center text-3xl">⚡</div>
+  <h1 class="text-3xl font-black mt-3">HAMO-AI</h1></div>
+  <div class="grid grid-cols-2 gap-2 bg-[#0b0d19] rounded-xl p-1 mb-5">
+   <button id="loginTab" class="btn navactive" type="button" onclick="showAuthMode('login')">تسجيل الدخول</button>
+   <button id="signupTab" class="btn text-gray-400" type="button" onclick="showAuthMode('signup')">إنشاء حساب</button>
+  </div>
+  <form id="authForm" class="space-y-3">
+   <div id="nameWrap" class="hidden"><input id="displayName" class="field" placeholder="الاسم"></div>
+   <input id="email" type="email" class="field" placeholder="البريد الإلكتروني" required>
+   <input id="password" type="password" minlength="6" class="field" placeholder="كلمة السر (6 أحرف على الأقل)" required>
+   <button id="authSubmit" class="btn grad w-full text-white" type="submit">دخول</button>
+  </form>
+  <p id="authMessage" class="text-sm text-center mt-4 text-rose-300"></p>
+ </div>
+</div>
+
+<div id="appView" class="hidden">
+ <!-- القائمة الجانبية (3 نقاط) -->
+ <div id="overlay" class="hidden fixed inset-0 bg-black/60 z-40" onclick="toggleMenu(false)"></div>
+ <aside id="drawer" class="glass fixed top-0 left-0 h-full w-72 max-w-[85%] z-50 flex flex-col p-4 gap-3" style="transform:translateX(-100%);transition:transform .25s">
+  <button onclick="go('account')" class="flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 text-right">
+   <div class="avatar w-12 h-12 text-xl"></div><div class="min-w-0"><div id="menuName" class="font-bold truncate"></div><div class="text-[11px] text-gray-400">حسابي ›</div></div>
+  </button>
+  <button onclick="go('chat')" class="btn text-right bg-white/5">💬 الدردشة</button>
+  <div class="flex-1 min-h-0 flex flex-col gap-2 pr-3 border-r border-gray-700">
+   <button onclick="newChat();go('chat')" class="btn grad text-white text-sm !py-2">＋ محادثة جديدة</button>
+   <div id="convList" class="flex-1 overflow-y-auto space-y-1 text-sm"></div>
+  </div>
+  <button onclick="go('video')" class="btn text-right bg-white/5">🎬 توليد الفيديو</button>
+ </aside>
+
+ <!-- الصفحة 2: الدردشة -->
+ <section id="page-chat" class="hidden flex-col" style="height:100vh;height:100dvh">
+  <div class="hdr"><button onclick="toggleMenu(true)" class="text-2xl px-2" aria-label="القائمة">⋮</button><div class="text-sm font-bold truncate">💬 <span id="convTitle">محادثة جديدة</span></div></div>
+  <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4 max-w-3xl w-full mx-auto"></div>
+  <div class="p-3 max-w-3xl w-full mx-auto"><div class="glass rounded-2xl p-2 flex gap-2"><input id="chatInput" class="field border-0 bg-transparent" placeholder="اكتب رسالتك..."><button id="sendBtn" onclick="sendMessage()" class="btn grad text-white">إرسال</button></div></div>
+ </section>
+
+ <!-- الصفحة 4: توليد الفيديو -->
+ <section id="page-video" class="hidden flex-col">
+  <div class="hdr"><button onclick="toggleMenu(true)" class="text-2xl px-2" aria-label="القائمة">⋮</button><div class="text-sm font-bold">🎬 توليد الفيديو</div></div>
+  <div class="max-w-2xl w-full mx-auto p-4 space-y-4">
+   <textarea id="videoPrompt" class="field min-h-32" placeholder="وصف الفيديو..."></textarea>
+   <div class="grid grid-cols-2 gap-3">
+    <select id="ratio" class="field"><option value="9:16">9:16 عمودي</option><option value="16:9">16:9 أفقي</option></select>
+    <select id="duration" class="field"><option value="10">10 ثواني</option><option value="15">15 ثانية</option><option value="30">30 ثانية</option></select>
+   </div>
+   <button id="videoBtn" onclick="generateVideo()" class="btn grad text-white w-full">إنشاء الفيديو ✨</button>
+   <div id="videoStatus" class="text-sm text-center text-gray-400"></div>
+   <div id="videoOutput" class="hidden"><video id="generatedVideo" controls playsinline class="w-full max-h-96 rounded-xl bg-black"></video></div>
+  </div>
+ </section>
+
+ <!-- الصفحة 3: الحساب -->
+ <section id="page-account" class="hidden flex-col">
+  <div class="hdr"><button onclick="goBack()" class="text-sm font-bold px-2">‹ رجوع</button><div class="text-sm font-bold">حسابي</div></div>
+  <div class="max-w-md w-full mx-auto p-5 space-y-4 text-center">
+   <label class="cursor-pointer inline-block"><div class="avatar w-28 h-28 text-5xl mx-auto"></div><div class="text-xs text-purple-300 mt-2">تغيير الصورة</div><input id="photoInput" type="file" accept="image/*" class="hidden"></label>
+   <div id="accName" class="font-black text-lg"></div><div id="accEmail" class="text-xs text-gray-400"></div>
+   <div class="glass rounded-2xl p-4 space-y-3 text-right">
+    <div class="font-bold text-sm">تغيير كلمة السر</div>
+    <input id="oldPass" type="password" class="field" placeholder="كلمة السر الحالية">
+    <input id="newPass" type="password" minlength="6" class="field" placeholder="كلمة السر الجديدة">
+    <button onclick="changePassword()" class="btn grad text-white w-full">حفظ</button>
+    <p id="passMsg" class="text-xs text-center"></p>
+   </div>
+   <button onclick="logout()" class="btn w-full border border-rose-400/40 text-rose-300">تسجيل الخروج</button>
+  </div>
+ </section>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut, updateProfile, EmailAuthProvider, reauthenticateWithCredential, updatePassword } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+const firebaseConfig = {
+ apiKey:"AIzaSyDlbSV7mwqRl3Ud2QfzAqNeguT2pD4_bZw",authDomain:"hamo-ai-8ce77.firebaseapp.com",projectId:"hamo-ai-8ce77",
+ storageBucket:"hamo-ai-8ce77.firebasestorage.app",messagingSenderId:"648130524698",appId:"1:648130524698:web:9ef1e0442ca2a1d3f243a3",measurementId:"G-2RSWLT98QM"
+};
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const $=id=>document.getElementById(id);
+let authMode='login',currentUser=null,photo=null,cur='chat',prevPage='chat',convId=null,convMsgs=[];
+const EMPTY='<p class="text-center text-gray-500 text-sm py-8">أهلاً بك! اكتب رسالتك للبدء.</p>';
+
+/* ---- الدخول ---- */
+window.showAuthMode=m=>{authMode=m;
+ $('loginTab').className='btn '+(m==='login'?'navactive':'text-gray-400');$('signupTab').className='btn '+(m==='signup'?'navactive':'text-gray-400');
+ $('nameWrap').classList.toggle('hidden',m!=='signup');$('authSubmit').textContent=m==='login'?'دخول':'إنشاء حساب جديد';$('authMessage').textContent='';};
+$('authForm').addEventListener('submit',async e=>{
+ e.preventDefault();$('authMessage').textContent='جاري المعالجة...';$('authSubmit').disabled=true;
+ const email=$('email').value.trim(),pw=$('password').value;
+ try{ if(authMode==='signup'){const c=await createUserWithEmailAndPassword(auth,email,pw);const n=$('displayName').value.trim();if(n)await updateProfile(c.user,{displayName:n});}
+  else await signInWithEmailAndPassword(auth,email,pw);
+ }catch(err){$('authMessage').textContent=authError(err.code);}finally{$('authSubmit').disabled=false;}
+});
+function authError(c){return({'auth/email-already-in-use':'هذا البريد مسجل من قبل.','auth/invalid-email':'البريد غير صحيح.','auth/weak-password':'كلمة السر ضعيفة.','auth/invalid-credential':'البريد أو كلمة السر غير صحيحين.','auth/wrong-password':'كلمة السر غير صحيحة.','auth/network-request-failed':'تحقق من الإنترنت.','auth/operation-not-allowed':'فعّل Email/Password من Firebase.','auth/too-many-requests':'محاولات كثيرة، حاول لاحقاً.'})[c]||('وقع خطأ: '+c);}
+onAuthStateChanged(auth,async u=>{
+ currentUser=u;$('authView').classList.toggle('hidden',!!u);$('appView').classList.toggle('hidden',!u);
+ if(!u)return;
+ photo=null;try{const s=await getDoc(doc(db,'users',u.uid,'profile','main'));if(s.exists())photo=s.data().photo||null;}catch(e){}
+ refreshProfile();newChat();go('chat');loadConversations();
+});
+window.logout=async()=>{toggleMenu(false);await signOut(auth);};
+
+/* ---- التنقل ---- */
+window.toggleMenu=o=>{$('drawer').style.transform=o?'translateX(0)':'translateX(-100%)';$('overlay').classList.toggle('hidden',!o);};
+window.goBack=()=>go(prevPage||'chat');
+window.go=p=>{
+ if(p==='account'&&cur!=='account')prevPage=cur;
+ cur=p;['chat','video','account'].forEach(x=>{const el=$('page-'+x);el.classList.toggle('hidden',x!==p);el.classList.toggle('flex',x===p);});
+ toggleMenu(false);
+};
+function refreshProfile(){
+ const name=currentUser.displayName||currentUser.email;
+ $('menuName').textContent=name;$('accName').textContent=name;$('accEmail').textContent=currentUser.email;
+ document.querySelectorAll('.avatar').forEach(a=>{a.style.backgroundImage=photo?`url(${photo})`:'';a.textContent=photo?'':name.charAt(0).toUpperCase();});
+}
+$('photoInput').addEventListener('change',e=>{
+ const f=e.target.files[0];if(!f)return;const img=new Image();
+ img.onload=async()=>{const c=document.createElement('canvas');c.width=c.height=160;const x=c.getContext('2d'),s=Math.min(img.width,img.height);
+  x.drawImage(img,(img.width-s)/2,(img.height-s)/2,s,s,0,0,160,160);photo=c.toDataURL('image/jpeg',.8);refreshProfile();
+  try{await setDoc(doc(db,'users',currentUser.uid,'profile','main'),{photo});}catch(err){alert('تعذر حفظ الصورة.');}URL.revokeObjectURL(img.src);};
+ img.src=URL.createObjectURL(f);
+});
+window.changePassword=async()=>{
+ const m=$('passMsg'),o=$('oldPass').value,n=$('newPass').value;m.className='text-xs text-center text-gray-400';
+ if(!o||n.length<6){m.textContent='أدخل كلمة السر الحالية وجديدة من 6 أحرف.';return;}
+ try{await reauthenticateWithCredential(currentUser,EmailAuthProvider.credential(currentUser.email,o));await updatePassword(currentUser,n);
+  m.className='text-xs text-center text-emerald-300';m.textContent='تم تغيير كلمة السر.';$('oldPass').value=$('newPass').value='';
+ }catch(err){m.className='text-xs text-center text-rose-300';m.textContent=authError(err.code);}
+};
+
+/* ---- الدردشة ---- */
+function addBubble(who,text){
+ const w=document.createElement('div');w.className=who==='user'?'flex justify-start':'flex justify-end';
+ const b=document.createElement('div');b.className='bubble '+(who==='user'?'bg-indigo-600':'bg-[#25213d] border border-purple-500/20');
+ b.textContent=text;w.appendChild(b);$('messages').appendChild(w);$('messages').scrollTop=$('messages').scrollHeight;
+}
+window.newChat=()=>{convId=null;convMsgs=[];$('messages').innerHTML=EMPTY;$('convTitle').textContent='محادثة جديدة';markActive();};
+window.sendMessage=async()=>{
+ const input=$('chatInput'),prompt=input.value.trim();if(!prompt||!currentUser)return;
+ if(!convMsgs.length)$('messages').innerHTML='';
+ input.value='';addBubble('user',prompt);$('sendBtn').disabled=true;
+ const wait=document.createElement('p');wait.className='text-xs text-purple-300';wait.textContent='HAMO-AI يفكر...';$('messages').appendChild(wait);
+ try{
+  const token=await currentUser.getIdToken();const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({prompt,messages:[...convMsgs,{role:'user',content:prompt}].slice(-20)})});
+  if(!res.ok)throw new Error('تعذر الاتصال بخادم الدردشة ('+res.status+').');
+  const data=await res.json(),reply=data.reply||data.generated_text;if(!reply)throw new Error('رد غير صالح.');
+  wait.remove();addBubble('ai',reply);convMsgs.push({role:'user',content:prompt},{role:'assistant',content:reply});
+  const base=['users',currentUser.uid,'conversations'];
+  if(!convId){const title=prompt.slice(0,40);convId=(await addDoc(collection(db,...base),{title,createdAt:serverTimestamp(),updatedAt:serverTimestamp()})).id;$('convTitle').textContent=title;}
+  else await updateDoc(doc(db,...base,convId),{updatedAt:serverTimestamp()});
+  const m=collection(db,...base,convId,'messages');
+  await addDoc(m,{role:'user',content:prompt,createdAt:new Date()});await addDoc(m,{role:'assistant',content:reply,createdAt:new Date(Date.now()+1)});
+  loadConversations();
+ }catch(err){wait.textContent='تعذر الحصول على رد: '+err.message;}finally{$('sendBtn').disabled=false;}
+};
+$('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendMessage();});
+
+/* ---- قائمة المحادثات تحت Chat ---- */
+let convCache=[];
+function markActive(){document.querySelectorAll('#convList [data-id]').forEach(r=>r.classList.toggle('bg-indigo-600/30',r.dataset.id===convId));}
+async function loadConversations(){
+ const list=$('convList');
+ try{const snap=await getDocs(query(collection(db,'users',currentUser.uid,'conversations'),orderBy('updatedAt','desc')));
+  list.innerHTML='';if(snap.empty){list.innerHTML='<p class="text-xs text-gray-500 p-2">لا توجد محادثات بعد.</p>';return;}
+  snap.forEach(s=>{const d=s.data(),row=document.createElement('div');row.dataset.id=s.id;row.className='flex items-center gap-1 rounded-lg hover:bg-white/5';
+   const t=document.createElement('button');t.className='flex-1 text-right truncate px-2 py-2';t.textContent=d.title||'محادثة';t.onclick=()=>openConversation(s.id,d.title);
+   const x=document.createElement('button');x.className='text-rose-300 px-2';x.textContent='✕';x.onclick=()=>deleteConversation(s.id);
+   row.append(t,x);list.appendChild(row);});
+  markActive();
+ }catch(e){list.innerHTML='<p class="text-xs text-rose-300 p-2">تعذر تحميل المحادثات.</p>';}
+}
+async function openConversation(id,title){
+ try{const snap=await getDocs(query(collection(db,'users',currentUser.uid,'conversations',id,'messages'),orderBy('createdAt','asc')));
+  convId=id;convMsgs=[];$('messages').innerHTML='';$('convTitle').textContent=title||'';
+  snap.forEach(s=>{const m=s.data();convMsgs.push({role:m.role,content:m.content});addBubble(m.role==='user'?'user':'ai',m.content);});
+  markActive();go('chat');
+ }catch(e){alert('تعذر فتح المحادثة.');}
+}
+async function deleteConversation(id){
+ if(!confirm('حذف هذه المحادثة؟'))return;
+ try{const snap=await getDocs(collection(db,'users',currentUser.uid,'conversations',id,'messages'));
+  await Promise.all(snap.docs.map(s=>deleteDoc(s.ref)));await deleteDoc(doc(db,'users',currentUser.uid,'conversations',id));
+  if(convId===id)newChat();loadConversations();
+ }catch(e){alert('تعذر الحذف.');}
+}
+
+/* ---- الفيديو ---- */
+window.generateVideo=async()=>{
+ const prompt=$('videoPrompt').value.trim();if(!prompt){$('videoStatus').textContent='اكتب وصف الفيديو أولاً.';return;}
+ const btn=$('videoBtn');btn.disabled=true;$('videoStatus').textContent='⏳ جاري الإرسال...';$('videoOutput').classList.add('hidden');
+ try{const token=await currentUser.getIdToken();const res=await fetch('/api/video',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({prompt,aspectRatio:$('ratio').value,duration:Number($('duration').value)})});
+  if(!res.ok)throw new Error('تعذر الاتصال بخادم الفيديو ('+res.status+').');
+  const data=await res.json();if(!data.videoUrl)throw new Error(data.message||'لم يرجع الخادم رابط الفيديو.');
+  $('generatedVideo').src=data.videoUrl;$('videoOutput').classList.remove('hidden');$('videoStatus').textContent='تم تجهيز الفيديو.';
+ }catch(err){$('videoStatus').textContent='لم يكتمل التوليد: '+err.message;}finally{btn.disabled=false;}
+};
+</script>
+</body>
+</html>
