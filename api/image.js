@@ -51,28 +51,31 @@ async function viaCloudflare(prompt) {
   return 'data:image/jpeg;base64,' + data.result.image;
 }
 
-// تعديل صورة موجودة (img2img) بـ Stable Diffusion 1.5 على Cloudflare
-async function runImg2Img(model, prompt, dataUrl, strength, width, height) {
+// تعديل الصور بـ FLUX.2 klein على Cloudflare (كيقبل صورة + وصف التعديل)
+const EDIT_MODELS = ['@cf/black-forest-labs/flux-2-klein-4b', '@cf/black-forest-labs/flux-2-klein-9b'];
+
+async function runEdit(model, prompt, dataUrl, width, height) {
+  const mime = dataUrl.slice(5, dataUrl.indexOf(';'));
+  const form = new FormData();
+  form.append('prompt', prompt);
+  form.append('input_image_0', new Blob([Buffer.from(dataUrl.split(',')[1], 'base64')], { type: mime }), 'input.' + (mime.split('/')[1] || 'jpg'));
+  form.append('width', String(width));
+  form.append('height', String(height));
   const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + process.env.CF_ACCOUNT_ID + '/ai/run/' + model, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + process.env.CF_API_TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, image_b64: dataUrl.split(',')[1], strength, num_steps: 20, guidance: 7.5, width, height })
+    headers: { 'Authorization': 'Bearer ' + process.env.CF_API_TOKEN },
+    body: form
   });
-  const type = r.headers.get('content-type') || '';
-  if (r.ok && type.startsWith('image/')) {
-    return 'data:' + type + ';base64,' + Buffer.from(await r.arrayBuffer()).toString('base64');
-  }
   const data = await r.json().catch(() => ({}));
-  if (r.ok && data.result && data.result.image) return 'data:image/png;base64,' + data.result.image;
-  throw new Error((data.errors && data.errors[0] && data.errors[0].message) || 'Cloudflare img2img error ' + r.status);
+  const b64 = (data.result && data.result.image) || data.image;
+  if (r.ok && b64) return 'data:' + (b64.startsWith('iVBOR') ? 'image/png' : 'image/jpeg') + ';base64,' + b64;
+  throw new Error((data.errors && data.errors[0] && data.errors[0].message) || ('error ' + r.status));
 }
 
-// كنجرب أكثر من نموذج، إلا واحد ما سمحش لحسابك كنمشي للتاني
-const I2I_MODELS = ['@cf/stabilityai/stable-diffusion-xl-base-1.0', '@cf/runwayml/stable-diffusion-v1-5-img2img'];
 async function viaImg2Img(prompt, dataUrl, strength, width, height) {
   const errs = [];
-  for (const m of I2I_MODELS) {
-    try { return await runImg2Img(m, prompt, dataUrl, strength, width, height); }
+  for (const m of EDIT_MODELS) {
+    try { return await runEdit(m, 'Edit the input image: ' + prompt, dataUrl, width, height); }
     catch (e) { errs.push(m.split('/').pop() + ': ' + String(e.message || e).slice(0, 160)); }
   }
   throw new Error(errs.join(' || '));
