@@ -16,7 +16,7 @@ async function verifyUser(req) {
 }
 
 // ترجمة الوصف للإنجليزية بـ Gemini (نماذج الصور كتفهم الإنجليزية أحسن بزاف)
-async function toEnglish(prompt) {
+async function toEnglish(prompt, edit) {
   if (!process.env.AI_KEY || !/[^\x00-\x7F]/.test(prompt)) return prompt;
   try {
     const base = (process.env.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai').replace(/\/$/, '');
@@ -27,7 +27,9 @@ async function toEnglish(prompt) {
         model: process.env.AI_MODEL || 'gemini-2.5-flash',
         max_tokens: 200,
         messages: [
-          { role: 'system', content: 'Translate the user text into a short, vivid English prompt for an image generator. Output only the prompt, nothing else.' },
+          { role: 'system', content: edit
+            ? 'Translate the user text into a short English instruction for editing an EXISTING photo. Keep it as an imperative edit command (e.g. "make him fall on the ground"). Do not describe a new scene or new people. Output only the instruction.'
+            : 'Translate the user text into a short, vivid English prompt for an image generator. Output only the prompt, nothing else.' },
           { role: 'user', content: prompt }
         ]
       })
@@ -52,7 +54,7 @@ async function viaCloudflare(prompt) {
 }
 
 // تعديل الصور بـ FLUX.2 klein على Cloudflare (كيقبل صورة + وصف التعديل)
-const EDIT_MODELS = ['@cf/black-forest-labs/flux-2-klein-4b', '@cf/black-forest-labs/flux-2-klein-9b'];
+const EDIT_MODELS = [process.env.EDIT_MODEL, '@cf/black-forest-labs/flux-2-klein-4b', '@cf/black-forest-labs/flux-2-klein-9b'].filter(Boolean);
 
 async function runEdit(model, prompt, dataUrl, width, height) {
   const mime = dataUrl.slice(5, dataUrl.indexOf(';'));
@@ -75,7 +77,7 @@ async function runEdit(model, prompt, dataUrl, width, height) {
 async function viaImg2Img(prompt, dataUrl, strength, width, height) {
   const errs = [];
   for (const m of EDIT_MODELS) {
-    try { return await runEdit(m, 'Edit the input image: ' + prompt, dataUrl, width, height); }
+    try { return await runEdit(m, 'Edit image 0. Keep exactly the same person or subject, face, clothing, background, framing and art style as image 0. Change only this: ' + prompt, dataUrl, width, height); }
     catch (e) { errs.push(m.split('/').pop() + ': ' + String(e.message || e).slice(0, 160)); }
   }
   throw new Error(errs.join(' || '));
@@ -107,7 +109,7 @@ module.exports = async (req, res) => {
       }
       const snap = v => Math.min(1024, Math.max(256, Math.round((Number(v) || 512) / 8) * 8));
       const strength = Math.min(1, Math.max(0.1, Number(body.strength) || 0.6));
-      const img = await viaImg2Img(await toEnglish(prompt), body.image, strength, snap(body.width), snap(body.height));
+      const img = await viaImg2Img(await toEnglish(prompt, true), body.image, strength, snap(body.width), snap(body.height));
       return res.status(200).json({ image: img });
     }
     const en = await toEnglish(prompt);
