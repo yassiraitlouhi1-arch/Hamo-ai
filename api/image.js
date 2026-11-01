@@ -70,11 +70,12 @@ async function runImg2Img(model, prompt, dataUrl, strength, width, height) {
 // كنجرب أكثر من نموذج، إلا واحد ما سمحش لحسابك كنمشي للتاني
 const I2I_MODELS = ['@cf/stabilityai/stable-diffusion-xl-base-1.0', '@cf/runwayml/stable-diffusion-v1-5-img2img'];
 async function viaImg2Img(prompt, dataUrl, strength, width, height) {
-  let last;
+  const errs = [];
   for (const m of I2I_MODELS) {
-    try { return await runImg2Img(m, prompt, dataUrl, strength, width, height); } catch (e) { last = e; }
+    try { return await runImg2Img(m, prompt, dataUrl, strength, width, height); }
+    catch (e) { errs.push(m.split('/').pop() + ': ' + String(e.message || e).slice(0, 160)); }
   }
-  throw last;
+  throw new Error(errs.join(' || '));
 }
 
 async function viaPollinations(prompt) {
