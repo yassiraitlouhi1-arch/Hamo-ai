@@ -52,8 +52,8 @@ async function viaCloudflare(prompt) {
 }
 
 // تعديل صورة موجودة (img2img) بـ Stable Diffusion 1.5 على Cloudflare
-async function viaImg2Img(prompt, dataUrl, strength, width, height) {
-  const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + process.env.CF_ACCOUNT_ID + '/ai/run/@cf/runwayml/stable-diffusion-v1-5-img2img', {
+async function runImg2Img(model, prompt, dataUrl, strength, width, height) {
+  const r = await fetch('https://api.cloudflare.com/client/v4/accounts/' + process.env.CF_ACCOUNT_ID + '/ai/run/' + model, {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + process.env.CF_API_TOKEN, 'Content-Type': 'application/json' },
     body: JSON.stringify({ prompt, image_b64: dataUrl.split(',')[1], strength, num_steps: 20, guidance: 7.5, width, height })
@@ -65,6 +65,16 @@ async function viaImg2Img(prompt, dataUrl, strength, width, height) {
   const data = await r.json().catch(() => ({}));
   if (r.ok && data.result && data.result.image) return 'data:image/png;base64,' + data.result.image;
   throw new Error((data.errors && data.errors[0] && data.errors[0].message) || 'Cloudflare img2img error ' + r.status);
+}
+
+// كنجرب أكثر من نموذج، إلا واحد ما سمحش لحسابك كنمشي للتاني
+const I2I_MODELS = ['@cf/stabilityai/stable-diffusion-xl-base-1.0', '@cf/runwayml/stable-diffusion-v1-5-img2img'];
+async function viaImg2Img(prompt, dataUrl, strength, width, height) {
+  let last;
+  for (const m of I2I_MODELS) {
+    try { return await runImg2Img(m, prompt, dataUrl, strength, width, height); } catch (e) { last = e; }
+  }
+  throw last;
 }
 
 async function viaPollinations(prompt) {
